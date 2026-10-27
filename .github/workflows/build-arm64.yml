@@ -1,0 +1,41 @@
+name: Make SDK for Android (bionic arm64)
+# tag = AOSP 标签: 独立的 platform-tools-* 标签只到 35.0.2, 36 起的
+# platform-tools 挂在 android-16.0.0_r* 发布分支上(android-17.0.0_r1 → 37.0.0);
+# release 名取自源码里 plat_tools_source.prop_template 的 Pkg.Revision。
+on:
+  workflow_dispatch:
+    inputs:
+      tags:
+        description: "AOSP tag 矩阵(JSON)"
+        required: false
+        type: string
+        default: '[{"tag":"platform-tools-35.0.2"},{"tag":"android-16.0.0_r4"}]'
+      ndk_version:
+        description: "编译用官方 NDK 大版本(bionic clang)"
+        required: false
+        type: string
+        default: "30"
+      only:
+        description: "只要这些目标(JSON)"
+        required: false
+        type: string
+        default: '["aarch64-linux-android"]'
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(inputs.tags) }}
+    uses: ./.github/workflows/make-sdk.yml
+    secrets: inherit
+    with:
+      platform: bionic
+      tag: ${{ matrix.tag }}
+      ndk_version: ${{ inputs.ndk_version }}
+      only: ${{ inputs.only }}
+      targets: '["aarch64-linux-android", "armv7a-linux-androideabi", "i686-linux-android", "x86_64-linux-android"]'
