@@ -1,7 +1,7 @@
 name: Make SDK for Android (bionic arm64)
 # tag = AOSP 标签: 独立的 platform-tools-* 标签只到 35.0.2, 36 起的
 # platform-tools 挂在 android-16.0.0_r* 发布分支上(android-17.0.0_r1 → 37.0.0);
-# release 名取自源码里 plat_tools_source.prop_template 的 Pkg.Revision。
+# Release Tag 使用 sdk-<实际 Build Tools 版本>，与 Platform Tools 版本区分。
 on:
   workflow_dispatch:
     inputs:

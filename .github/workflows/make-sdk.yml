@@ -109,16 +109,15 @@ jobs:
       - name: Release name
         id: release
         run: |
-          name="$(sed -n 's/^Pkg\.Revision=//p' src/development/sdk/plat_tools_source.prop_template 2>/dev/null)"
-          if [ -n '${{ inputs.build_tools_version }}' ]; then
-            name='sdk-${{ inputs.build_tools_version }}'
-          fi
-          echo "name=${name:-${{ inputs.tag }}}" >> "$GITHUB_OUTPUT"
+          version="$(find android-sdk/build-tools -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort -V | tail -1)"
+          test -n "$version"
+          echo "name=sdk-$version" >> "$GITHUB_OUTPUT"
 
       - name: Release
         uses: ncipollo/release-action@v1.21.0
         with:
           tag: "${{ steps.release.outputs.name }}"
+          name: "Android SDK ${{ steps.release.outputs.name }}"
           artifacts: ${{ github.workspace }}/android-sdk-${{ matrix.target }}.${{ inputs.platform == 'windows' && '7z' || 'tar.xz' }}
           allowUpdates: true
           replacesArtifacts: true
