@@ -141,6 +141,25 @@ for n in 1 2 3 4; do
 done
 [ -n "$PT_LATEST" ] || fetch_unpack "$PT_URL" "$HOST_SDK/platform-tools.zip" "$HOST_SDK"
 
+# Android platforms contain API stubs/data, not host executables. Provision them
+# explicitly here; device-side AGP downloads are disabled to protect ARM64 tools.
+read -r -a PLATFORM_APIS <<< "${SDK_PLATFORM_APIS:-34 35 36}"
+PLATFORM_PACKAGES=()
+for api in "${PLATFORM_APIS[@]}"; do
+  [[ "$api" =~ ^[0-9]+$ ]] || { echo "Invalid Android API: $api" >&2; exit 1; }
+  PLATFORM_PACKAGES+=("platforms;android-$api")
+done
+[ "${#PLATFORM_PACKAGES[@]}" -gt 0 ] || { echo "No Android platforms requested" >&2; exit 1; }
+for n in 1 2 3 4; do
+  "$SDKMANAGER" --sdk_root="$HOST_SDK" "${PLATFORM_PACKAGES[@]}" && break
+  [ "$n" = 4 ] && exit 1
+  sleep $((n * 15))
+done
+for api in "${PLATFORM_APIS[@]}"; do
+  test -s "$HOST_SDK/platforms/android-$api/android.jar"
+  test -s "$HOST_SDK/platforms/android-$api/source.properties"
+done
+
 # --- splice our ELF host tools over the official ones -----------------------
 log "Splicing custom host tools into the SDK"
 splice() {

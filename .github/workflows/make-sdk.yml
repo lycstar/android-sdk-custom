@@ -19,6 +19,16 @@ on:
         description: "AOSP source tag (android-* or platform-tools-*)"
         required: true
         type: string
+      build_tools_version:
+        description: "Exact official Build Tools version"
+        required: false
+        type: string
+        default: ""
+      platform_apis:
+        description: "Android Platform API levels (space separated)"
+        required: false
+        type: string
+        default: "34 35 36"
       ndk_version:
         description: "Official NDK version for the bionic clang (bionic only)"
         required: false
@@ -88,6 +98,8 @@ jobs:
             -e PLATFORM='${{ inputs.platform }}' \
             -e TARGET='${{ matrix.target }}' \
             -e TAG='${{ inputs.tag }}' \
+            -e BUILD_TOOLS_VERSION='${{ inputs.build_tools_version }}' \
+            -e SDK_PLATFORM_APIS='${{ inputs.platform_apis }}' \
             -e NDK_VERSION='${{ inputs.ndk_version }}' \
             -e NDK_REVISION='${{ inputs.ndk_revision }}' \
             -e ROOTDIR=/work \
@@ -98,6 +110,9 @@ jobs:
         id: release
         run: |
           name="$(sed -n 's/^Pkg\.Revision=//p' src/development/sdk/plat_tools_source.prop_template 2>/dev/null)"
+          if [ -n '${{ inputs.build_tools_version }}' ]; then
+            name='sdk-${{ inputs.build_tools_version }}'
+          fi
           echo "name=${name:-${{ inputs.tag }}}" >> "$GITHUB_OUTPUT"
 
       - name: Release
