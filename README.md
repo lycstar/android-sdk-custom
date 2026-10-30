@@ -92,7 +92,8 @@ Build Tools use real version directories rather than aliases between versions.
 Each release includes `sdk-components-aarch64-linux-android.json` with component
 IDs, revisions, installation paths, asset names, compressed sizes and SHA-256
 hashes, plus `SHA256SUMS-aarch64-linux-android`. Release notes list actual sizes.
-The XZ dictionary is limited to 16 MiB for extraction on Android devices.
+Component archives use a 16 MiB XZ dictionary. The complete bundle retains the
+existing 256 MiB dictionary to compress repeated data across platform versions.
 
 `Make SDK for Android (bionic arm64)` continues to build native binaries, now emits
 component archives alongside each SDK, and assembles the default distribution

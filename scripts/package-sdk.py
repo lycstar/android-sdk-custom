@@ -79,11 +79,14 @@ def components(sdk, target):
     return found
 
 
-def archive(sdk, destination, paths):
-    # A bounded XZ dictionary also bounds memory use when extracting on a phone.
+def archive(sdk, destination, paths, *, bundle=False):
+    # The bundle benefits from cross-version deduplication (e.g. platform data).
+    # Use the existing SDK's 256 MiB extraction dictionary; component archives
+    # use 16 MiB, since they do not contain multiple platform/tool versions.
     print(f'Packaging {destination.name}', flush=True)
     with destination.open('wb') as output:
-        compressor = subprocess.Popen(['xz', '-T2', '-6', '--lzma2=dict=16MiB'],
+        compression = ['-T1', '-9', '--lzma2=dict=256MiB'] if bundle else ['-T2', '-6', '--lzma2=dict=16MiB']
+        compressor = subprocess.Popen(['xz', *compression],
                                       stdin=subprocess.PIPE, stdout=output)
         try:
             with tarfile.open(fileobj=compressor.stdin, mode='w|', format=tarfile.PAX_FORMAT) as tar:
@@ -114,7 +117,7 @@ def package(sdk, destination, target):
         manifest['components'].append(record)
     # Bundle and component archives contain exactly the same prepared directories.
     manifest['bundle'] = archive(sdk, destination / f'android-sdk-{target}.tar.xz',
-                                 [item[1] for item in entries] + licenses)
+                                 [item[1] for item in entries] + licenses, bundle=True)
     manifest_path = destination / f'sdk-components-{target}.json'
     manifest_path.write_text(json.dumps(manifest, indent=2) + '\n')
     files = sorted(destination.glob('*.tar.xz')) + [manifest_path]
