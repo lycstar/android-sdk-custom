@@ -143,7 +143,24 @@ done
 
 # Android platforms contain API stubs/data, not host executables. Provision them
 # explicitly here; device-side AGP downloads are disabled to protect ARM64 tools.
-read -r -a PLATFORM_APIS <<< "${SDK_PLATFORM_APIS:-${BUILD_TOOLS_VERSION%%.*}}"
+if [ -z "${SDK_PLATFORM_APIS:-}" ]; then
+  if [ "$PLATFORM" = bionic ] && [ "$TARGET" = aarch64-linux-android ]; then
+    # Official IDs may be 36 or 37.0. Resolve the exact ID instead of inventing it.
+    _major=${BUILD_TOOLS_VERSION%%.*}
+    _available=$("$SDKMANAGER" --sdk_root="$HOST_SDK" --list)
+    if printf '%s\n' "$_available" | grep -E "^[[:space:]]*platforms;android-${_major}[[:space:]]" >/dev/null; then
+      SDK_PLATFORM_APIS=$_major
+    elif printf '%s\n' "$_available" | grep -E "^[[:space:]]*platforms;android-${_major}\\.0[[:space:]]" >/dev/null; then
+      SDK_PLATFORM_APIS=${_major}.0
+    else
+      echo "No matching official Platform for Build Tools $BUILD_TOOLS_VERSION" >&2
+      exit 1
+    fi
+  else
+    SDK_PLATFORM_APIS="34 35 36"
+  fi
+fi
+read -r -a PLATFORM_APIS <<< "$SDK_PLATFORM_APIS"
 PLATFORM_PACKAGES=()
 for api in "${PLATFORM_APIS[@]}"; do
   # 官方平台 ID 含小数版本(android-36.1/37.0/37.1/37.2), 允许 x.y 形式

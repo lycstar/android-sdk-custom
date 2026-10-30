@@ -27,7 +27,7 @@ for release in releases:
         path = directory / asset['name']
         if path.stat().st_size != asset['size']:
             raise ValueError(f'Backup size mismatch: {path}')
-        if asset.get('digest', '').startswith('sha256:'):
+        if (asset.get('digest') or '').startswith('sha256:'):
             with path.open('rb') as stream:
                 actual = hashlib.file_digest(stream, 'sha256').hexdigest()
             if actual != asset['digest'][7:]:

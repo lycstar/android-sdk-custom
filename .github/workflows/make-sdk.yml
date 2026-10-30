@@ -89,6 +89,9 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Check packaging shell syntax
+        run: bash -n scripts/make-sdk.sh
+
       - name: Make SDK
         run: |
           IMAGE="ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/sdk-builder:latest"
