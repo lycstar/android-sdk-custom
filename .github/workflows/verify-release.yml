@@ -1,0 +1,48 @@
+name: Verify published Android SDK
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Published Build Tools version"
+        required: true
+        default: '35.0.0'
+        type: string
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download published SDK and verify content
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SDK_REPOSITORY: ${{ github.repository }}
+          SDK_VERSION: ${{ inputs.version }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, os, re, subprocess, tarfile
+          from pathlib import Path
+          version = os.environ['SDK_VERSION']
+          if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', version):
+              raise ValueError('Invalid version')
+          subprocess.run(['gh', 'release', 'download', f'sdk-{version}', '--repo', os.environ['SDK_REPOSITORY'],
+                          '--pattern', 'android-sdk.tar.xz', '--pattern', 'SHA256SUMS'], check=True)
+          checks = dict(line.split('  ', 1)[::-1] for line in Path('SHA256SUMS').read_text().splitlines())
+          with open('android-sdk.tar.xz', 'rb') as stream:
+              assert hashlib.file_digest(stream, 'sha256').hexdigest() == checks['android-sdk.tar.xz']
+          with tarfile.open('android-sdk.tar.xz') as tar:
+              names = tar.getnames()
+              builds = {n.split('/')[2] for n in names if n.startswith('android-sdk/build-tools/')}
+              platforms = {n.split('/')[2] for n in names if n.startswith('android-sdk/platforms/')}
+              assert builds == {version}, builds
+              major = version.split('.')[0]
+              assert len(platforms) == 1 and platforms <= {f'android-{major}', f'android-{major}.0'}, platforms
+              for name in ('aapt2', 'aidl', 'zipalign'):
+                  path = f'android-sdk/build-tools/{version}/{name}'
+                  assert tar.getmember(path).mode & 0o111, path
+                  header = tar.extractfile(path).read(20)
+                  assert header[:4] == b'\x7fELF' and int.from_bytes(header[18:20], 'little') == 183, name
+              assert 'android-sdk/cmdline-tools/latest/bin/sdkmanager' in names
+              assert 'android-sdk/platform-tools/adb' in names
+              print(f'Published SDK {version}: SHA-256, exact Build Tools / Platform and ARM64 ELF checks passed.')
+          PY
