@@ -28,7 +28,7 @@ on:
         description: "Android Platform API levels (space separated)"
         required: false
         type: string
-        default: "34 35 36"
+        default: ""
       ndk_version:
         description: "Official NDK version for the bionic clang (bionic only)"
         required: false
@@ -114,12 +114,20 @@ jobs:
           echo "name=sdk-$version" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
+      - name: Publish Android ARM64 SDK and Platform releases
+        if: inputs.platform == 'bionic' && matrix.target == 'aarch64-linux-android'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SDK_REPOSITORY: ${{ github.repository }}
+        run: python3 scripts/publish-releases.py --dist dist --repo "$SDK_REPOSITORY" --commit "$GITHUB_SHA"
+
       - name: Release
+        if: inputs.platform != 'bionic' || matrix.target != 'aarch64-linux-android'
         uses: ncipollo/release-action@v1.21.0
         with:
-          tag: "${{ steps.release.outputs.name }}"
+          tag: "${{ steps.release.outputs.name }}-${{ inputs.platform }}"
           name: "Android SDK · Build Tools ${{ steps.release.outputs.version }}"
-          artifacts: ${{ inputs.platform == 'bionic' && matrix.target == 'aarch64-linux-android' && format('{0}/dist/*', github.workspace) || format('{0}/android-sdk-{1}.{2}', github.workspace, matrix.target, inputs.platform == 'windows' && '7z' || 'tar.xz') }}
+          artifacts: ${{ format('{0}/android-sdk-{1}.{2}', github.workspace, matrix.target, inputs.platform == 'windows' && '7z' || 'tar.xz') }}
           allowUpdates: true
           replacesArtifacts: true
           body: ''

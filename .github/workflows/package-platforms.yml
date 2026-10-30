@@ -1,0 +1,60 @@
+name: Package official Android Platforms
+on:
+  workflow_dispatch:
+    inputs:
+      apis:
+        description: "Official Platform IDs, space separated (for example 34 35 36 36.1)"
+        required: true
+        default: '34 35 36'
+        type: string
+permissions:
+  contents: write
+concurrency:
+  group: package-android-platforms
+  cancel-in-progress: false
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Download and package official Platforms
+        env:
+          PLATFORM_APIS: ${{ inputs.apis }}
+        run: |
+          python3 - <<'PY'
+          import importlib.util, os, re, subprocess
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location('packager', 'scripts/package-sdk.py')
+          packager = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(packager)
+          apis = os.environ['PLATFORM_APIS'].split()
+          if not apis or any(not re.fullmatch(r'[0-9]+(?:\.[0-9]+)?', api) for api in apis):
+              raise ValueError('Invalid Platform IDs')
+          sdk = Path('prepared/android-sdk').resolve()
+          sdk.mkdir(parents=True)
+          manager = str(Path(os.environ['ANDROID_HOME']) / 'cmdline-tools/latest/bin/sdkmanager')
+          # SDK Manager retains Google's platform package IDs, revisions and metadata.
+          subprocess.run([manager, f'--sdk_root={sdk}', '--install',
+                          *[f'platforms;android-{api}' for api in apis]], input='y\n' * 100, text=True, check=True)
+          check = Path('platform-check')
+          check.mkdir()
+          source = check / 'PlatformCheck.java'
+          source.write_text('public class PlatformCheck extends android.app.Activity {}')
+          for api in dict.fromkeys(apis):
+              platform = sdk / f'platforms/android-{api}'
+              subprocess.run(['javac', '--release', '17', '-classpath', str(platform / 'android.jar'),
+                              '-d', str(check / api), str(source)], check=True)
+              packager.package_platform(sdk, platform, Path('dist'))
+          PY
+      - name: Publish Platform releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SDK_REPOSITORY: ${{ github.repository }}
+        run: python3 scripts/publish-releases.py --dist dist --repo "$SDK_REPOSITORY" --commit "$GITHUB_SHA"

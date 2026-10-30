@@ -80,12 +80,10 @@ def components(sdk, target):
 
 
 def archive(sdk, destination, paths, *, bundle=False):
-    # The bundle benefits from cross-version deduplication (e.g. platform data).
-    # Use the existing SDK's 256 MiB extraction dictionary; component archives
-    # use 16 MiB, since they do not contain multiple platform/tool versions.
+    # Single-platform bundles and parts use a mobile-friendly 16 MiB dictionary.
     print(f'Packaging {destination.name}', flush=True)
     with destination.open('wb') as output:
-        compression = ['-T1', '-9', '--lzma2=dict=256MiB'] if bundle else ['-T2', '-6', '--lzma2=dict=16MiB']
+        compression = ['-T2', '-6', '--lzma2=dict=16MiB']
         compressor = subprocess.Popen(['xz', *compression],
                                       stdin=subprocess.PIPE, stdout=output)
         try:
@@ -104,35 +102,68 @@ def archive(sdk, destination, paths, *, bundle=False):
     return {'asset': destination.name, 'size': destination.stat().st_size, 'sha256': digest}
 
 
-def package(sdk, destination, target):
-    sdk = sdk.resolve()
-    destination.mkdir(parents=True, exist_ok=True)
-    entries = components(sdk, target)
+def finish_release(directory, records, description):
+    (directory / 'SHA256SUMS').write_text(''.join(
+        f'{record["sha256"]}  {record["asset"]}\n' for record in records))
+    lines = [description, '', '| Asset | Size |', '| --- | --- |']
+    lines += [f'| `{r["asset"]}` | {r["size"] / 1048576:.1f} MiB |' for r in records]
+    lines += ['', 'Archives extract into `android-sdk/` and preserve official package metadata.',
+              'Android ARM64 host tools; NDK and CMake are distributed separately.', '']
+    (directory / 'RELEASE.md').write_text('\n'.join(lines))
+
+
+def package_platform(sdk, directory, destination):
+    api = directory.name.removeprefix('android-')
+    if not re.fullmatch(r'[0-9]+(?:\.[0-9]+)?', api) or not (directory / 'android.jar').is_file():
+        raise ValueError(f'Incomplete Android Platform: {directory}')
+    revision(directory)
+    output = destination / f'platform-{api}'
+    output.mkdir(parents=True, exist_ok=True)
     licenses = [sdk / 'licenses'] if (sdk / 'licenses').is_dir() else []
-    manifest = {'schemaVersion': 1, 'target': target, 'components': []}
-    for identifier, directory, name in entries:
-        record = archive(sdk, destination / f'{name}.tar.xz', [directory, *licenses])
-        record.update(id=identifier, version=revision(directory),
-                      installPath=str(directory.relative_to(sdk)))
-        manifest['components'].append(record)
-    # Bundle and component archives contain exactly the same prepared directories.
-    manifest['bundle'] = archive(sdk, destination / f'android-sdk-{target}.tar.xz',
-                                 [item[1] for item in entries] + licenses, bundle=True)
-    manifest_path = destination / f'sdk-components-{target}.json'
-    manifest_path.write_text(json.dumps(manifest, indent=2) + '\n')
-    files = sorted(destination.glob('*.tar.xz')) + [manifest_path]
-    (destination / f'SHA256SUMS-{target}').write_text(''.join(
-        f'{sha256(path)}  {path.name}\n'
-        for path in files))
-    lines = ['| Component | Version | Download |', '| --- | --- | --- |']
-    for record in manifest['components']:
-        lines.append(f'| `{record["id"]}` | {record["version"]} | {record["size"] / 1048576:.1f} MiB |')
-    lines += ['', f'Full SDK bundle: **{manifest["bundle"]["size"] / 1048576:.1f} MiB**.',
-              'Download the full bundle for initialization, or only a missing component.',
-              'All archives extract into the same `android-sdk/` root. Existing versions are retained by the Flit installer.',
-              'NDK and CMake are distributed separately.', '']
-    (destination / f'RELEASE-{target}.md').write_text('\n'.join(lines))
-    return manifest
+    record = archive(sdk, output / 'platforms.tar.xz', [directory, *licenses])
+    finish_release(output, [record], f'Android Platform {api}, package revision {revision(directory)}. Architecture-independent official SDK data.')
+    return output
+
+
+def package(sdk, destination, target):
+    if target != 'aarch64-linux-android':
+        raise ValueError('Folder-named SDK releases are reserved for Android ARM64')
+    sdk = sdk.resolve()
+    entries = components(sdk, target)
+    platforms = {path.name.removeprefix('android-'): path for identifier, path, _ in entries
+                 if identifier.startswith('platforms;')}
+    build_tools = [path for identifier, path, _ in entries if identifier.startswith('build-tools;')]
+    common = [path for identifier, path, _ in entries
+              if identifier == 'platform-tools' or identifier.startswith('cmdline-tools;')]
+    if len(common) != 2 or not (sdk / 'platform-tools') in common:
+        raise ValueError('SDK needs platform-tools and exactly one cmdline-tools version')
+    # Validate the entire selection before creating any publishable output.
+    selections = []
+    for tools in build_tools:
+        major = tools.name.split('.')[0]
+        api = major if major in platforms else f'{major}.0'
+        if api not in platforms:
+            raise ValueError(f'Build Tools {tools.name} needs Platform {major} (or {major}.0)')
+        selections.append((tools, platforms[api]))
+    destination.mkdir(parents=True, exist_ok=True)
+    if any(destination.iterdir()):
+        raise ValueError(f'Output directory must be empty: {destination}')
+    licenses = [sdk / 'licenses'] if (sdk / 'licenses').is_dir() else []
+    releases = []
+    for tools, platform in selections:
+        output = destination / f'sdk-{tools.name}'
+        output.mkdir()
+        paths = [tools, *common]
+        records = []
+        for path in paths:
+            name = 'build-tools' if path == tools else ('platform-tools' if path.name == 'platform-tools' else 'cmdline-tools')
+            records.append(archive(sdk, output / f'{name}.tar.xz', [path, *licenses]))
+        records.append(archive(sdk, output / 'android-sdk.tar.xz', [*paths, platform, *licenses], bundle=True))
+        finish_release(output, records, f'Android ARM64 SDK: Build Tools {tools.name}; Platform {platform.name.removeprefix("android-")}; Platform Tools {revision(sdk / "platform-tools")}; Command-line Tools {revision(next(p for p in common if p.name != "platform-tools"))}.')
+        releases.append(output)
+    for platform in platforms.values():
+        releases.append(package_platform(sdk, platform, destination))
+    return releases
 
 
 if __name__ == '__main__':

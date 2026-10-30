@@ -1,21 +1,21 @@
-name: Package Android SDK bundle and components
-run-name: Package Android ARM64 SDK
+name: Repackage Android ARM64 SDK releases
+run-name: Repackage Android ARM64 SDK releases
 on:
   workflow_dispatch:
     inputs:
-      release_tag:
-        description: "Bundle release tag (default sdk-bundle-YYYYMMDD)"
-        required: false
+      source_release:
+        description: "Existing SDK release containing the tools/platforms to repackage"
+        required: true
         type: string
-  workflow_call:
-
+      replace_all_releases:
+        description: "Migration only: back up, delete all existing releases, then publish the verified replacements"
+        type: boolean
+        default: false
 permissions:
   contents: write
-
 concurrency:
-  group: package-android-sdk
+  group: migrate-android-sdk-releases
   cancel-in-progress: false
-
 jobs:
   package:
     runs-on: ubuntu-24.04
@@ -28,70 +28,60 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: Test packaging
+      - name: Test packaging and publication
         run: python3 -m unittest discover -s tests -v
-      - name: Assemble ARM64 releases and official Android platforms
+      - name: Back up existing releases and verify source
         env:
           GH_TOKEN: ${{ github.token }}
           SDK_REPOSITORY: ${{ github.repository }}
+          SOURCE_RELEASE: ${{ inputs.source_release }}
         run: |
-          python3 scripts/assemble-sdk.py --repo "$SDK_REPOSITORY" --work "$RUNNER_TEMP/sdk-bundle" \
-            --sdkmanager "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-      - name: Compile against every Android platform
+          python3 scripts/backup-releases.py --repo "$SDK_REPOSITORY" --dest backup
+          python3 - <<'PY'
+          import os, tarfile
+          from pathlib import Path
+          tag = os.environ['SOURCE_RELEASE']
+          if '/' in tag or tag in ('.', '..'):
+              raise ValueError('Invalid source tag')
+          source = Path('backup') / tag
+          candidates = [source / name for name in ('android-sdk.tar.xz', 'android-sdk-aarch64-linux-android.tar.xz')]
+          archive = next(path for path in candidates if path.is_file())
+          with tarfile.open(archive) as tar:
+              tar.extractall('prepared', filter='data')
+          PY
+      - name: Save recoverable release backup
+        uses: actions/upload-artifact@v4
+        with:
+          name: previous-releases
+          path: backup/
+          compression-level: 0
+          retention-days: 30
+          if-no-files-found: error
+      - name: Compile against every Platform
         run: |
           mkdir -p "$RUNNER_TEMP/platform-check"
           echo 'public class PlatformCheck extends android.app.Activity {}' > "$RUNNER_TEMP/platform-check/PlatformCheck.java"
-          for platform in "$RUNNER_TEMP/sdk-bundle/base/android-sdk/platforms/"android-*; do
-            echo "Checking $(basename "$platform")"
-            javac --release 17 -classpath "$platform/android.jar" \
-              -d "$RUNNER_TEMP/platform-check/$(basename "$platform")" "$RUNNER_TEMP/platform-check/PlatformCheck.java"
+          for platform in prepared/android-sdk/platforms/android-*; do
+            javac --release 17 -classpath "$platform/android.jar" -d "$RUNNER_TEMP/platform-check/$(basename "$platform")" "$RUNNER_TEMP/platform-check/PlatformCheck.java"
           done
-      - name: Package bundle and components
+      - name: Generate and verify separate SDK and Platform releases
         run: |
-          python3 scripts/package-sdk.py \
-            --sdk "$RUNNER_TEMP/sdk-bundle/base/android-sdk" \
-            --dest dist --target aarch64-linux-android
-          cp "$RUNNER_TEMP/sdk-bundle/sources.json" dist/sources-aarch64-linux-android.json
-          cat dist/RELEASE-aarch64-linux-android.md >> "$GITHUB_STEP_SUMMARY"
-          du -sh "$RUNNER_TEMP/sdk-bundle/base/android-sdk" >> "$GITHUB_STEP_SUMMARY"
-      - name: Verify archives and checksums
-        run: |
-          cd dist
-          sha256sum --check SHA256SUMS-aarch64-linux-android
-          for archive in *.tar.xz; do tar -tJf "$archive" > /dev/null; done
-      - uses: actions/upload-artifact@v4
+          python3 scripts/package-sdk.py --sdk prepared/android-sdk --dest dist --target aarch64-linux-android
+          python3 scripts/publish-releases.py --dist dist --repo "${{ github.repository }}" --commit "$GITHUB_SHA" --verify-only
+      - name: Save all replacement assets before publishing
+        uses: actions/upload-artifact@v4
         with:
-          name: android-sdk-aarch64-bundle-and-components
-          path: dist/*
+          name: replacement-releases
+          path: dist/
           compression-level: 0
-          retention-days: 7
+          retention-days: 30
           if-no-files-found: error
-      - name: Publish SDK bundle release
+      - name: Publish verified releases
         env:
           GH_TOKEN: ${{ github.token }}
-          REQUESTED_TAG: ${{ inputs.release_tag }}
+          SDK_REPOSITORY: ${{ github.repository }}
+          REPLACE_ALL: ${{ inputs.replace_all_releases }}
         run: |
-          tag="${REQUESTED_TAG:-sdk-bundle-$(date -u +%Y%m%d)}"
-          [[ "$tag" =~ ^sdk-bundle-[A-Za-z0-9._-]+$ ]]
-          if gh release view "$tag" > /dev/null 2>&1; then
-            gh release upload "$tag" dist/* --clobber
-            gh release edit "$tag" --notes-file dist/RELEASE-aarch64-linux-android.md
-          else
-            gh release create "$tag" dist/* --target "$GITHUB_SHA" \
-              --title 'Android SDK · Default ARM64 bundle and components' \
-              --notes-file dist/RELEASE-aarch64-linux-android.md
-          fi
-          # 版本 tag: 一个 build-tools 版本一个 tag, tag 内 = 总包 + 全部组件分包
-          # (platform-tools / cmdline-tools / build-tools / 各平台), 平台按 API 分包。
-          for archive in dist/android-build-tools-*.tar.xz; do
-            version="$(basename "$archive" .tar.xz)"
-            version="${version#android-build-tools-}"
-            if gh release view "sdk-$version" > /dev/null 2>&1; then
-              gh release upload "sdk-$version" dist/* --clobber
-              gh release edit "sdk-$version" --title "Android SDK · Build Tools $version"
-            else
-              gh release create "sdk-$version" dist/* --target "$GITHUB_SHA" \
-                --title "Android SDK · Build Tools $version" \
-                --notes 'Total bundle + all component splits for this release.'
-            fi
-          done
+          args=()
+          if [ "$REPLACE_ALL" = true ]; then args+=(--replace-snapshot backup/releases.json); fi
+          python3 scripts/publish-releases.py --dist dist --repo "$SDK_REPOSITORY" --commit "$GITHUB_SHA" "${args[@]}"

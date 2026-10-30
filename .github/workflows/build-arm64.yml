@@ -9,12 +9,7 @@ on:
         description: "AOSP tag 矩阵(JSON)"
         required: false
         type: string
-        default: '[{"tag":"platform-tools-34.0.5","build_tools_version":"34.0.0","platform_apis":"34"},{"tag":"platform-tools-35.0.2","build_tools_version":"35.0.0","platform_apis":"35"},{"tag":"android-16.0.0_r4","build_tools_version":"36.0.0"}]'
-      platform_apis:
-        description: "Android Platform API levels bundled as SDK data (space separated)"
-        required: false
-        type: string
-        default: "30 31 32 33 34 35 36"
+        default: '[{"tag":"platform-tools-34.0.5","build_tools_version":"34.0.0","platform_apis":"34"},{"tag":"platform-tools-35.0.2","build_tools_version":"35.0.0","platform_apis":"35"},{"tag":"android-16.0.0_r4","build_tools_version":"36.0.0","platform_apis":"36"},{"tag":"android-17.0.0_r1","build_tools_version":"37.0.0","platform_apis":"37.0"}]'
       ndk_version:
         description: "编译用官方 NDK 大版本(bionic clang)"
         required: false
@@ -42,12 +37,7 @@ jobs:
       platform: bionic
       tag: ${{ matrix.tag }}
       build_tools_version: ${{ matrix.build_tools_version || '' }}
-      platform_apis: ${{ matrix.platform_apis || inputs.platform_apis }}
+      platform_apis: ${{ matrix.platform_apis }}
       ndk_version: ${{ inputs.ndk_version }}
       only: ${{ inputs.only }}
       targets: '["aarch64-linux-android", "armv7a-linux-androideabi", "i686-linux-android", "x86_64-linux-android"]'
-
-  package-default:
-    needs: build
-    uses: ./.github/workflows/package-sdk.yml
-    secrets: inherit

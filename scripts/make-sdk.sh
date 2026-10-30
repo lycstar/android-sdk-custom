@@ -143,7 +143,7 @@ done
 
 # Android platforms contain API stubs/data, not host executables. Provision them
 # explicitly here; device-side AGP downloads are disabled to protect ARM64 tools.
-read -r -a PLATFORM_APIS <<< "${SDK_PLATFORM_APIS:-34 35 36}"
+read -r -a PLATFORM_APIS <<< "${SDK_PLATFORM_APIS:-${BUILD_TOOLS_VERSION%%.*}}"
 PLATFORM_PACKAGES=()
 for api in "${PLATFORM_APIS[@]}"; do
   # 官方平台 ID 含小数版本(android-36.1/37.0/37.1/37.2), 允许 x.y 形式
