@@ -49,7 +49,7 @@ def components(sdk, target):
         if not re.fullmatch(r'[0-9]+(?:\.[0-9]+)?', api) or not (directory / 'android.jar').is_file():
             raise ValueError(f'Incomplete Android Platform: {directory}')
         revision(directory)
-        found.append((f'platforms;android-{api}', directory, f'android-platform-{api}'))
+        found.append((f'platforms;android-{api}', directory, f'platform-{api}'))
     for directory in sorted((sdk / 'build-tools').glob('*')):
         version = revision(directory)
         if version != directory.name:
@@ -60,18 +60,18 @@ def components(sdk, target):
         if target == 'aarch64-linux-android':
             for name in ('aapt2', 'aidl', 'zipalign'):
                 check_elf(directory / name, 183)
-        found.append((f'build-tools;{version}', directory, f'android-build-tools-{version}-{target}'))
+        found.append((f'build-tools;{version}', directory, f'build-tools-{version}'))
     directory = sdk / 'platform-tools'
     if directory.is_dir():
         version = revision(directory)
         if target == 'aarch64-linux-android':
             check_elf(directory / 'adb', 183)
-        found.append(('platform-tools', directory, f'android-platform-tools-{version}-{target}'))
+        found.append(('platform-tools', directory, 'platform-tools'))
     for directory in sorted(command_line.glob('*')):
         if not (directory / 'bin/sdkmanager').is_file():
             raise ValueError(f'Incomplete command-line tools: {directory}')
         version = revision(directory)
-        found.append((f'cmdline-tools;{version}', directory, f'android-command-line-tools-{version}-{target}'))
+        found.append((f'cmdline-tools;{version}', directory, 'cmdline-tools'))
     if not any(item[0].startswith('platforms;') for item in found):
         raise ValueError('No Android Platforms')
     if not any(item[0].startswith('build-tools;') for item in found):
