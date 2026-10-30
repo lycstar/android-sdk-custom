@@ -108,7 +108,10 @@ Clients derive download paths from the required version and verify `SHA256SUMS`:
 - `Repackage Android ARM64 SDK releases` converts an existing bundle into these
   releases. Its migration option backs up all old assets, verifies all replacements,
   uploads both sets as recoverable Actions artifacts, then deletes and recreates
-  releases. Git tags are retained. Backups are retained for 30 days.
+  releases. Target tags are checked before deletion. Git tags are retained.
+  Backups are retained for 30 days.
+- `Publish prepared Android SDK releases` resumes publication from the saved
+  `replacement-releases` artifact without rebuilding or recompressing any tools.
 
 Normal publishing preserves existing releases rather than overwriting them.
 The destructive replacement option is for explicitly requested migrations only.

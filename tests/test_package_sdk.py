@@ -106,6 +106,20 @@ class PackageSDKTests(unittest.TestCase):
                 publisher.publish(self.root, 'example/sdk', 'commit', snapshot)
             mutate.assert_not_called()
 
+    def test_tag_permission_failure_preserves_existing_releases(self):
+        import subprocess
+        snapshot = self.root / 'releases.json'
+        existing = [{'id': 1, 'tag_name': 'sdk-old', 'assets': []}]
+        snapshot.write_text(json.dumps(existing))
+        with patch.object(publisher, 'validate', return_value=[self.root / 'platform-35']), \
+             patch.object(publisher, 'releases', return_value=existing), \
+             patch.object(publisher, 'run', return_value='[[]]'), \
+             patch.object(publisher.subprocess, 'run', side_effect=subprocess.CalledProcessError(1, 'gh')) as mutate:
+            with self.assertRaises(subprocess.CalledProcessError):
+                publisher.publish(self.root, 'example/sdk', 'commit', snapshot)
+            self.assertEqual(mutate.call_count, 1)
+            self.assertEqual(mutate.call_args.args[0][:3], ['gh', 'api', 'repos/example/sdk/git/refs'])
+
     def test_rejects_wrong_architecture_and_revision_before_packaging(self):
         self.elf('build-tools/35.0.0/aapt2', machine=62)
         with self.assertRaisesRegex(ValueError, 'Wrong host architecture'):
