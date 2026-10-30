@@ -146,7 +146,8 @@ done
 read -r -a PLATFORM_APIS <<< "${SDK_PLATFORM_APIS:-34 35 36}"
 PLATFORM_PACKAGES=()
 for api in "${PLATFORM_APIS[@]}"; do
-  [[ "$api" =~ ^[0-9]+$ ]] || { echo "Invalid Android API: $api" >&2; exit 1; }
+  # 官方平台 ID 含小数版本(android-36.1/37.0/37.1/37.2), 允许 x.y 形式
+  [[ "$api" =~ ^[0-9]+([.][0-9]+)?$ ]] || { echo "Invalid Android API: $api" >&2; exit 1; }
   PLATFORM_PACKAGES+=("platforms;android-$api")
 done
 [ "${#PLATFORM_PACKAGES[@]}" -gt 0 ] || { echo "No Android platforms requested" >&2; exit 1; }
