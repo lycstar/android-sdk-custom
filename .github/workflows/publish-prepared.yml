@@ -1,0 +1,34 @@
+name: Publish prepared Android SDK releases
+run-name: Publish prepared Android SDK releases
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Run containing the verified replacement-releases artifact"
+        required: true
+        type: string
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: migrate-android-sdk-releases
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: replacement-releases
+          path: dist
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+      - name: Verify and publish prepared releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SDK_REPOSITORY: ${{ github.repository }}
+        run: python3 scripts/publish-releases.py --dist dist --repo "$SDK_REPOSITORY" --commit "$GITHUB_SHA"

@@ -58,6 +58,17 @@ def publish(dist, repo, commit, replace_snapshot=None):
         identity = lambda items: sorted((r['id'], r['tag_name'], sorted((a['id'], a['name'], a['size']) for a in r['assets'])) for r in items)
         if identity(existing) != identity(snapshot):
             raise ValueError('Releases changed since backup; refusing deletion')
+    # GitHub may deny creating tags at an older workflow commit. Check/create every
+    # required tag before deleting any release, so this fails without an outage.
+    pages = json.loads(run('gh', 'api', '--paginate', '--slurp', f'repos/{repo}/git/matching-refs/tags/'))
+    known_refs = {ref['ref'] for page in pages for ref in page}
+    for directory in prepared:
+        ref = f'refs/tags/{directory.name}'
+        if ref not in known_refs:
+            subprocess.run(['gh', 'api', f'repos/{repo}/git/refs', '--method', 'POST',
+                            '-f', f'ref={ref}', '-f', f'sha={commit}'], check=True,
+                           stdout=subprocess.DEVNULL)
+    if replace_snapshot:
         for release in existing:
             subprocess.run(['gh', 'release', 'delete', release['tag_name'], '--repo', repo, '--yes'], check=True)
         existing = []
