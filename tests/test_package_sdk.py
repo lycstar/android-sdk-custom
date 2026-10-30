@@ -86,7 +86,7 @@ class PackageSDKTests(unittest.TestCase):
         entries = packager.components(self.sdk, 'aarch64-linux-android')
         platform = next(entry for entry in entries if entry[0] == 'platforms;android-37.2')
         self.assertEqual(platform[1].name, 'android-37.2')
-        self.assertEqual(platform[2], 'android-platform-37.2')
+        self.assertEqual(platform[2], 'platform-37.2')
 
     def test_assembler_verifies_source_digests_and_merges_only_requested_build_tools(self):
         # Existing release bundles may contain overlapping components. Only the requested
