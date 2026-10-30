@@ -81,3 +81,28 @@ jobs:
               --title 'Android SDK · Default ARM64 bundle and components' \
               --notes-file dist/RELEASE-aarch64-linux-android.md
           fi
+          # 平台: 一个 API 一个 tag(android-<api>), 供按 compileSdk 差额补装
+          for archive in dist/android-platform-*.tar.xz; do
+            api="$(basename "$archive" .tar.xz)"
+            api="${api#android-platform-}"
+            if gh release view "android-$api" > /dev/null 2>&1; then
+              gh release upload "android-$api" "$archive" --clobber
+            else
+              gh release create "android-$api" "$archive" --target "$GITHUB_SHA" \
+                --title "Android Platform $api" \
+                --notes 'Platform data package (host-independent).'
+            fi
+          done
+          # SDK 核心: 按 build-tools 版本一个 tag(sdk-<version>), tag 内 = 总包 + 该版本分包
+          for archive in dist/android-build-tools-*.tar.xz; do
+            version="$(basename "$archive" .tar.xz)"
+            version="${version#android-build-tools-}"
+            core="dist/android-sdk-aarch64-linux-android.tar.xz"
+            if gh release view "sdk-$version" > /dev/null 2>&1; then
+              gh release upload "sdk-$version" "$archive" "$core" --clobber
+            else
+              gh release create "sdk-$version" "$archive" "$core" --target "$GITHUB_SHA" \
+                --title "Android SDK · Build Tools $version" \
+                --notes 'Total bundle + build-tools split; other components live in the sdk-bundle release.'
+            fi
+          done
