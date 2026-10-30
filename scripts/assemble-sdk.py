@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Assemble a default SDK from verified existing GitHub Release assets; no compilation."""
+"""Assemble ARM64 tools from releases and platforms from Google's SDK Manager."""
 import argparse
 import hashlib
 import json
@@ -20,7 +20,7 @@ def extract(archive, destination):
         tar.extractall(destination, filter='data')
 
 
-def assemble(config, repo, work):
+def assemble(config, repo, work, sdkmanager='sdkmanager'):
     if not re.fullmatch(r'[\w.-]+/[\w.-]+', repo):
         raise ValueError('Invalid GitHub repository')
     target = config['target']
@@ -58,6 +58,23 @@ def assemble(config, repo, work):
         if target_directory.exists():
             raise ValueError(f'Duplicate Build Tools version: {entry["version"]}')
         shutil.move(str(source), target_directory)
+    official_platforms = config.get('officialPlatforms', [])
+    if official_platforms:
+        packages = []
+        for api in official_platforms:
+            if not re.fullmatch(r'[0-9]+(?:\.[0-9]+)?', str(api)):
+                raise ValueError(f'Invalid official Platform API: {api}')
+            packages.append(f'platforms;android-{api}')
+        # Use the runner's current SDK Manager, not the tools being packaged.
+        # It verifies Google's archives and writes the official package.xml.
+        subprocess.run([sdkmanager, f'--sdk_root={sdk}', '--install', *packages], check=True)
+        for api, identifier in zip(official_platforms, packages):
+            properties = (sdk / f'platforms/android-{api}/source.properties').read_text()
+            if not re.search(rf'^AndroidVersion.ApiLevel\s*=\s*{re.escape(str(api))}\s*$', properties, re.M):
+                raise ValueError(f'Official Platform API mismatch: {api}')
+            sources.append({'repository': 'https://dl.google.com/android/repository/repository2-3.xml',
+                            'package': identifier,
+                            'revision': re.search(r'^Pkg.Revision\s*=\s*(\S+)', properties, re.M)[1]})
     for api in config['requiredPlatforms']:
         if not (sdk / f'platforms/android-{api}/android.jar').is_file():
             raise ValueError(f'Missing Platform API {api}')
@@ -73,5 +90,6 @@ if __name__ == '__main__':
     parser.add_argument('--config', type=Path, default=Path('sdk-bundle.json'))
     parser.add_argument('--repo', required=True)
     parser.add_argument('--work', type=Path, required=True)
+    parser.add_argument('--sdkmanager', default='sdkmanager')
     args = parser.parse_args()
-    assemble(json.loads(args.config.read_text()), args.repo, args.work.resolve())
+    assemble(json.loads(args.config.read_text()), args.repo, args.work.resolve(), args.sdkmanager)

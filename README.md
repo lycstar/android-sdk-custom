@@ -75,11 +75,16 @@ Feel free to open pull requests or issues if you have any contributions or feedb
 The `Package Android SDK bundle and components` workflow reuses existing releases,
 verifies their GitHub SHA-256 digests, and publishes a default bundle plus individual
 component archives. It does not compile the native tools again.
+Additional platforms come directly from Google's stable repository through the
+runner's SDK Manager, which verifies the downloads and creates official package
+metadata. Platforms contain architecture-independent files, so no ARM64 rebuild
+is needed. Official minor-version directories such as `android-37.2` are preserved.
+The workflow compiles a minimal Java Activity against every platform before packaging.
 
 The default selection is maintained in `sdk-bundle.json`:
 
-- Android Platforms API 30–36.
-- Build Tools 34.0.0, 35.0.0, and 36.0.0.
+- Android Platforms API 30–36, 36.1, 37.0, 37.1, and 37.2.
+- Build Tools 34.0.0, 35.0.0, 36.0.0, and 37.0.0.
 - One Platform Tools and Command-line Tools installation from the base SDK.
 - NDK and CMake remain separate distributions.
 

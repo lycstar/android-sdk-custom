@@ -46,7 +46,7 @@ def components(sdk, target):
     found = []
     for directory in sorted((sdk / 'platforms').glob('android-*')):
         api = directory.name.removeprefix('android-')
-        if not api.isdigit() or not (directory / 'android.jar').is_file():
+        if not re.fullmatch(r'[0-9]+(?:\.[0-9]+)?', api) or not (directory / 'android.jar').is_file():
             raise ValueError(f'Incomplete Android Platform: {directory}')
         revision(directory)
         found.append((f'platforms;android-{api}', directory, f'android-platform-{api}'))

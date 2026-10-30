@@ -24,13 +24,28 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
       - name: Test packaging
         run: python3 -m unittest discover -s tests -v
-      - name: Assemble verified existing SDK releases
+      - name: Assemble ARM64 releases and official Android platforms
         env:
           GH_TOKEN: ${{ github.token }}
           SDK_REPOSITORY: ${{ github.repository }}
-        run: python3 scripts/assemble-sdk.py --repo "$SDK_REPOSITORY" --work "$RUNNER_TEMP/sdk-bundle"
+        run: |
+          python3 scripts/assemble-sdk.py --repo "$SDK_REPOSITORY" --work "$RUNNER_TEMP/sdk-bundle" \
+            --sdkmanager "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+      - name: Compile against every Android platform
+        run: |
+          mkdir -p "$RUNNER_TEMP/platform-check"
+          echo 'public class PlatformCheck extends android.app.Activity {}' > "$RUNNER_TEMP/platform-check/PlatformCheck.java"
+          for platform in "$RUNNER_TEMP/sdk-bundle/base/android-sdk/platforms/"android-*; do
+            echo "Checking $(basename "$platform")"
+            javac --release 17 -classpath "$platform/android.jar" \
+              -d "$RUNNER_TEMP/platform-check/$(basename "$platform")" "$RUNNER_TEMP/platform-check/PlatformCheck.java"
+          done
       - name: Package bundle and components
         run: |
           python3 scripts/package-sdk.py \

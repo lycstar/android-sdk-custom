@@ -80,6 +80,14 @@ class PackageSDKTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'directory/revision mismatch'):
             packager.components(self.sdk, 'aarch64-linux-android')
 
+    def test_official_minor_api_directories_are_preserved(self):
+        self.write('platforms/android-37.2/android.jar', b'jar')
+        self.write('platforms/android-37.2/source.properties', b'Pkg.Revision=2\n')
+        entries = packager.components(self.sdk, 'aarch64-linux-android')
+        platform = next(entry for entry in entries if entry[0] == 'platforms;android-37.2')
+        self.assertEqual(platform[1].name, 'android-37.2')
+        self.assertEqual(platform[2], 'android-platform-37.2')
+
     def test_assembler_verifies_source_digests_and_merges_only_requested_build_tools(self):
         # Existing release bundles may contain overlapping components. Only the requested
         # Build Tools from additions should enter the new default tree.
@@ -91,13 +99,22 @@ class PackageSDKTests(unittest.TestCase):
                 tar.add(self.sdk / f'build-tools/{version}', arcname=f'android-sdk/build-tools/{version}')
         config = {'target': 'aarch64-linux-android', 'baseRelease': 'base',
                   'additionalBuildTools': [{'release': 'extra', 'version': '35.0.0'}],
-                  'requiredPlatforms': [35, 36], 'requiredBuildTools': ['35.0.0', '36.0.0']}
+                  'officialPlatforms': ['37.2'],
+                  'requiredPlatforms': [35, 36, '37.2'], 'requiredBuildTools': ['35.0.0', '36.0.0']}
         import shutil
         def api(*args):
             tag = args[-1].split('/')[-1]
             return json.dumps({'assets': [{'name': 'android-sdk-aarch64-linux-android.tar.xz',
                 'digest': 'sha256:' + hashlib.sha256((self.root / f'{tag}.tar.xz').read_bytes()).hexdigest()}]})
         def download(args, **kwargs):
+            if args[0] == 'sdkmanager':
+                self.assertEqual(args[2:], ['--install', 'platforms;android-37.2'])
+                directory = Path(args[1].removeprefix('--sdk_root=')) / 'platforms/android-37.2'
+                directory.mkdir(parents=True)
+                (directory / 'source.properties').write_text('Pkg.Revision=2\nAndroidVersion.ApiLevel=37.2\n')
+                (directory / 'android.jar').write_bytes(b'official jar')
+                (directory / 'package.xml').write_text('<official-metadata/>')
+                return
             directory = Path(args[args.index('--dir') + 1])
             shutil.copyfile(self.root / f'{args[3]}.tar.xz', directory / 'android-sdk-aarch64-linux-android.tar.xz')
         with patch.object(assembler, 'run', side_effect=api), patch.object(assembler.subprocess, 'run', side_effect=download):
@@ -105,7 +122,8 @@ class PackageSDKTests(unittest.TestCase):
             self.assertTrue((sdk / 'build-tools/35.0.0/package.xml').exists())
             self.assertTrue((sdk / 'build-tools/36.0.0/package.xml').exists())
             self.assertTrue((sdk / 'platforms/android-36/android.jar').exists())
-            self.assertEqual(len(json.loads((self.root / 'work/sources.json').read_text())), 2)
+            self.assertEqual((sdk / 'platforms/android-37.2/package.xml').read_text(), '<official-metadata/>')
+            self.assertEqual(len(json.loads((self.root / 'work/sources.json').read_text())), 3)
         def wrong_digest(*args):
             return json.dumps({'assets': [{'name': 'android-sdk-aarch64-linux-android.tar.xz',
                                           'digest': 'sha256:' + '0' * 64}]})
