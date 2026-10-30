@@ -69,3 +69,32 @@ See the **[LICENSE](LICENSE)** file for more details.
 
 ## 💬 Contributing
 Feel free to open pull requests or issues if you have any contributions or feedback!
+
+## Android ARM64 distribution
+
+The `Package Android SDK bundle and components` workflow reuses existing releases,
+verifies their GitHub SHA-256 digests, and publishes a default bundle plus individual
+component archives. It does not compile the native tools again.
+
+The default selection is maintained in `sdk-bundle.json`:
+
+- Android Platforms API 30–36.
+- Build Tools 34.0.0, 35.0.0, and 36.0.0.
+- One Platform Tools and Command-line Tools installation from the base SDK.
+- NDK and CMake remain separate distributions.
+
+Every archive uses the standard `android-sdk/` root, preserves package metadata,
+and includes the SDK licenses. Command-line tools use `cmdline-tools/latest/`.
+The complete bundle contains the same components as the individual archives;
+clients download the bundle for initial setup, then individual missing components.
+Build Tools use real version directories rather than aliases between versions.
+
+Each release includes `sdk-components-aarch64-linux-android.json` with component
+IDs, revisions, installation paths, asset names, compressed sizes and SHA-256
+hashes, plus `SHA256SUMS-aarch64-linux-android`. Release notes list actual sizes.
+The XZ dictionary is limited to 16 MiB for extraction on Android devices.
+
+`Make SDK for Android (bionic arm64)` continues to build native binaries, now emits
+component archives alongside each SDK, and assembles the default distribution
+after all requested source builds succeed. The packaging workflow can also be
+run independently when only the default selection or archive format changes.

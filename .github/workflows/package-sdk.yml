@@ -1,0 +1,66 @@
+name: Package Android SDK bundle and components
+run-name: Package Android ARM64 SDK
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Bundle release tag (default sdk-bundle-YYYYMMDD)"
+        required: false
+        type: string
+  workflow_call:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: package-android-sdk
+  cancel-in-progress: false
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Test packaging
+        run: python3 -m unittest discover -s tests -v
+      - name: Assemble verified existing SDK releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SDK_REPOSITORY: ${{ github.repository }}
+        run: python3 scripts/assemble-sdk.py --repo "$SDK_REPOSITORY" --work "$RUNNER_TEMP/sdk-bundle"
+      - name: Package bundle and components
+        run: |
+          python3 scripts/package-sdk.py \
+            --sdk "$RUNNER_TEMP/sdk-bundle/base/android-sdk" \
+            --dest dist --target aarch64-linux-android
+          cp "$RUNNER_TEMP/sdk-bundle/sources.json" dist/sources-aarch64-linux-android.json
+          cat dist/RELEASE-aarch64-linux-android.md >> "$GITHUB_STEP_SUMMARY"
+          du -sh "$RUNNER_TEMP/sdk-bundle/base/android-sdk" >> "$GITHUB_STEP_SUMMARY"
+      - name: Verify archives and checksums
+        run: |
+          cd dist
+          sha256sum --check SHA256SUMS-aarch64-linux-android
+          for archive in *.tar.xz; do tar -tJf "$archive" > /dev/null; done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-sdk-aarch64-bundle-and-components
+          path: dist/*
+          if-no-files-found: error
+      - name: Publish SDK bundle release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_TAG: ${{ inputs.release_tag }}
+        run: |
+          tag="${REQUESTED_TAG:-sdk-bundle-$(date -u +%Y%m%d)}"
+          [[ "$tag" =~ ^sdk-bundle-[A-Za-z0-9._-]+$ ]]
+          if gh release view "$tag" > /dev/null 2>&1; then
+            gh release upload "$tag" dist/* --clobber
+            gh release edit "$tag" --notes-file dist/RELEASE-aarch64-linux-android.md
+          else
+            gh release create "$tag" dist/* --target "$GITHUB_SHA" \
+              --title 'Android SDK · Default ARM64 bundle and components' \
+              --notes-file dist/RELEASE-aarch64-linux-android.md
+          fi

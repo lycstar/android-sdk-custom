@@ -119,7 +119,7 @@ jobs:
         with:
           tag: "${{ steps.release.outputs.name }}"
           name: "Android SDK · Build Tools ${{ steps.release.outputs.version }}"
-          artifacts: ${{ github.workspace }}/android-sdk-${{ matrix.target }}.${{ inputs.platform == 'windows' && '7z' || 'tar.xz' }}
+          artifacts: ${{ inputs.platform == 'bionic' && matrix.target == 'aarch64-linux-android' && format('{0}/dist/*', github.workspace) || format('{0}/android-sdk-{1}.{2}', github.workspace, matrix.target, inputs.platform == 'windows' && '7z' || 'tar.xz') }}
           allowUpdates: true
           replacesArtifacts: true
           body: ''

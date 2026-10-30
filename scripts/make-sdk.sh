@@ -285,6 +285,10 @@ if [ "$PLATFORM" = macos ]; then
   "$(dirname -- "$0")/macos-sign.sh" "$ROOTDIR/android-sdk"
 fi
 mkdir -p "$DEST"
+if [ "$PLATFORM" = bionic ] && [ "$TARGET" = aarch64-linux-android ]; then
+  python3 "$(dirname -- "$0")/package-sdk.py" --sdk "$HOST_SDK" --dest "$DEST/dist" --target "$TARGET"
+  exit 0
+fi
 if [ "$PLATFORM" = windows ]; then
   ARCHIVE="$DEST/android-sdk-$TARGET.7z"
   log "Archiving -> $ARCHIVE"

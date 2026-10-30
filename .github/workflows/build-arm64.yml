@@ -9,7 +9,7 @@ on:
         description: "AOSP tag 矩阵(JSON)"
         required: false
         type: string
-        default: '[{"tag":"platform-tools-30.0.5","build_tools_version":"30.0.3","platform_apis":"30"},{"tag":"platform-tools-33.0.3","build_tools_version":"33.0.1","platform_apis":"33"},{"tag":"platform-tools-34.0.5","build_tools_version":"34.0.0","platform_apis":"34"},{"tag":"platform-tools-35.0.2","build_tools_version":"35.0.0","platform_apis":"35"},{"tag":"android-16.0.0_r4","build_tools_version":"36.0.0"}]'
+        default: '[{"tag":"platform-tools-34.0.5","build_tools_version":"34.0.0","platform_apis":"34"},{"tag":"platform-tools-35.0.2","build_tools_version":"35.0.0","platform_apis":"35"},{"tag":"android-16.0.0_r4","build_tools_version":"36.0.0"}]'
       platform_apis:
         description: "Android Platform API levels bundled as SDK data (space separated)"
         required: false
@@ -46,3 +46,8 @@ jobs:
       ndk_version: ${{ inputs.ndk_version }}
       only: ${{ inputs.only }}
       targets: '["aarch64-linux-android", "armv7a-linux-androideabi", "i686-linux-android", "x86_64-linux-android"]'
+
+  package-default:
+    needs: build
+    uses: ./.github/workflows/package-sdk.yml
+    secrets: inherit

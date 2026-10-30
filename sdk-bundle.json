@@ -1,0 +1,10 @@
+{
+  "target": "aarch64-linux-android",
+  "baseRelease": "sdk-36.0.0",
+  "additionalBuildTools": [
+    {"release": "sdk-34.0.0", "version": "34.0.0"},
+    {"release": "sdk-35.0.0", "version": "35.0.0"}
+  ],
+  "requiredPlatforms": [30, 31, 32, 33, 34, 35, 36],
+  "requiredBuildTools": ["34.0.0", "35.0.0", "36.0.0"]
+}

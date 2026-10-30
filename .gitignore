@@ -17,3 +17,6 @@ patches/termux/libtermuxadb/target
 __pycache__/
 # remove git history
 git_remove_history.sh
+
+# SDK distribution assets
+/dist/
